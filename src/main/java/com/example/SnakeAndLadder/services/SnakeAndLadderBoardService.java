@@ -16,10 +16,14 @@ public class SnakeAndLadderBoardService {
     private Queue<Player> players;
     private boolean status;
     private int numberOfDice;
+
     private boolean shouldGameContinueTillLastPlayer;
     private boolean shouldAllowMultipleDiceRollOnSix;
+    private boolean shouldAllowTokenCutIfMultiplePlayerLandedOnSamePosition;
+
     private static final int DEFAULT_BOARD_SIZE = 100;
     private static final int DEFAULT_NUMBER_OF_DICE = 1;
+    private List<String> rankingList;
     public SnakeAndLadderBoardService(int size){
         this.board = new Board(size);
         this.players = new LinkedList<Player>();
@@ -30,12 +34,14 @@ public class SnakeAndLadderBoardService {
     }
 
     public void setPlayers(List<Player> playerList){
+        this.rankingList = new ArrayList<>();
         this.players = new LinkedList<>();
         this.initialNumberOfPlayer = playerList.size();
+
         Map<String, Integer> playerPeices = new HashMap<>();
         for (Player player : playerList){
             players.add(player);
-            playerPeices.put(player.getId(),0);
+            playerPeices.put(player.getId(),0);     // initially each player position is 0
         }
         this.board.setPlayerPeices(playerPeices);
     }
@@ -46,43 +52,76 @@ public class SnakeAndLadderBoardService {
         board.setSnakes(snakes);
     }
 
-    public void startGame(){
+    public List<String> startGame(){
         while (!isGameComplete()) {
 
             int totalDiceValue = getTotalValueAfterDiceRoll();
+
             Player currentPlayer = players.poll();
+
             move(totalDiceValue, currentPlayer);
+
             if(!hasPlayerWon(currentPlayer)) {
-                players.add(currentPlayer);
+                players.add(currentPlayer);             // not won added again in queue
             } else {
-                System.out.println(" Player: "+ currentPlayer.getName() + " has won the game");
+                //System.out.println(currentPlayer.getName() + " wins the game");
                 board.getPlayerPeices().remove(currentPlayer.getId());
+
+                rankingList.add(currentPlayer.getName());
+                if(players.size() == 1){        // if only one player left in the queue
+                    rankingList.add(players.poll().getName());
+                }
             }
         }
+        System.out.println("Game End");
+        return rankingList;
     }
 
     private boolean isGameComplete() {
-        int currentNumberOfPlayer = players.size();
-        return currentNumberOfPlayer < this.initialNumberOfPlayer;
+        int currentNumberOfPlayers = players.size();
+        if(shouldGameContinueTillLastPlayer == true){
+            return currentNumberOfPlayers == 0  ? true : false;                 // to get ranking of player
+        }
+        else {
+            return currentNumberOfPlayers < this.initialNumberOfPlayer;      // if players in queue < initial player
+        }
     }
+
     private  int getTotalValueAfterDiceRoll(){
-        return DiceService.roll();
+        if(shouldAllowMultipleDiceRollOnSix == true){           // on getting 6 dice is rolled again
+            int diceValue = DiceService.roll();
+            if(diceValue == 6) {
+                return diceValue + getTotalValueAfterDiceRoll();
+            }
+            else return diceValue;
+        } else {
+            return DiceService.roll();
+        }
     }
-    private void move(int position, Player player){
+    private void move(int totalDiceValue, Player player){
         int oldPosition = board.getPlayerPeices().get(player.getId());
-        int newPosition = oldPosition+position;
+        int newPosition = oldPosition + totalDiceValue;
         int boardSize = board.getSize();
 
         if(newPosition > boardSize) {
             newPosition = oldPosition;
         } else {
-            newPosition = getNewPositionAfterGoingThroughSnakeANdLadder(newPosition);
+            newPosition = getNewPositionAfterGoingThroughSnakeAndLadder(newPosition);
+        }
+        // to cut the token
+        if(shouldAllowTokenCutIfMultiplePlayerLandedOnSamePosition == true){
+            for(String p : board.getPlayerPeices().keySet()){
+                if(board.getPlayerPeices().get(p) == newPosition){
+                    board.getPlayerPeices().put(p,0);
+                }
+            }
         }
         board.getPlayerPeices().put(player.getId(), newPosition);
-        System.out.println("Player : " + player.getName() + " rolled a position : "+ position+ " to new position : "+ newPosition);
+
+        System.out.println(player.getName() + " rolled a "+ totalDiceValue+ " and moved from "+ oldPosition+ " to "+ newPosition);
 
     }
-    private int getNewPositionAfterGoingThroughSnakeANdLadder(int newPostion){
+    private int getNewPositionAfterGoingThroughSnakeAndLadder(int newPostion){
         int prevPosition;
 
         do {
